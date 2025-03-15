@@ -4,62 +4,285 @@ import { PrismaClient } from '@prisma/client';
 import { AdminSignIn } from './types';
 import bcrypt from 'bcrypt';
 import jwt from "jsonwebtoken";
+import { AuthMiddleware } from './middleware';
+import cookieParser from 'cookie-parser';
 
 const port = process.env.PORT || 3001;
-
 const app = express();
+
 app.use(express.json());
-app.use(cors())
+app.use(cors());
+app.use(cookieParser());
 
 const prisma = new PrismaClient();
 const secret = process.env.JWT_SECRET || 'mysecret';
 
-app.post('/adminlogin', async (req: any, res: any)=>{
-    try{
-        const {success} = AdminSignIn.safeParse(req.body);
-        if(!success){
-            return res.status(400).json({error: 'Invalid request body'});
+
+app.post('/adminlogin', async (req: any, res: any) => {
+    try {
+        const { success } = AdminSignIn.safeParse(req.body);
+        if (!success) {
+            return res.status(400).json({ error: 'Invalid request body' });
         }
         const { email, password } = req.body;
 
         const admin = await prisma.admin.findUnique({ where: { email } });
         if (!admin) {
-            return res.status(401).json({ error: 'Invalid credentials' });
+            return res.status(401).json({ error: 'Invalputid credentials' });
         }
+        
         const passwordValid = await bcrypt.compare(password, admin.password);
-        if(!passwordValid){
-            return res.status(401).json({message: 'Invalid credentials'});
+        if (!passwordValid) {
+            return res.status(401).json({ message: 'Invalid credentials' });
         }
-        const token = jwt.sign({ id: admin.id, email: admin.email }, secret, { expiresIn: '1h' });
+        
+        const token = jwt.sign(
+            { id: admin.id, email: admin.email },
+            secret,
+            { expiresIn: '1h' }
+        );
 
         return res.status(200).json({ token });
-    }catch(e){
+    } catch (e) {
         console.error(e);
-        return res.status(500).json({error: 'Internal server error'});
+        return res.status(500).json({ error: 'Internal server error' });
     }
-
 });
 
-app.post('/registeradmin', (req, res)=>{
-    
-})
+// Create Coupon (Admin only)
+app.post('/create-coupon', AuthMiddleware, async (req, res) => {
+    try {
+        const { code, totalQty, expiryDate } = req.body;
+        if (!req.admin || typeof req.admin === 'string') {
+            res.status(401).json({ error: 'Unauthorized' });
+            return;
+        }
 
-app.post('/add-coupon', (req, res)=>{
+        const coupon = await prisma.coupon.create({
+            data: {
+                code,
+                totalQty,
+                expiryDate: new Date(expiryDate),
+                AdminId: req.admin.id,
+            },
+        });
+        
+        res.status(201).json({ message: 'Coupon created successfully', coupon });
+    } catch (err) {
+        res.status(400).json({ error: 'Coupon already exists or invalid data' });
+    }
+});
 
-})
 
-app.post('/delete-coupon', (req, res)=>{
+app.delete('/delete-coupon', AuthMiddleware, async (req: any, res: any) => {
+    try {
+        const { couponId } = req.body;
+        if (!req.admin) {
+            return res.status(401).json({ error: 'Unauthorized' });
+        }
 
-})
+        await prisma.coupon.delete({
+            where: {
+                id: couponId,
+                AdminId: req.admin.id
+            }
+        });
 
-app.post('/update-coupon', (req, res)=>{
+        return res.status(200).json({ message: 'Coupon deleted successfully' });
+    } catch (err) {
+        return res.status(400).json({ error: 'Failed to delete coupon' });
+    }
+});
 
-})
+app.put('/update-coupon', AuthMiddleware, async (req: any, res: any) => {
+    try {
+        const { couponId, code, totalQty, expiryDate } = req.body;
+        if (!req.admin) {
+            return res.status(401).json({ error: 'Unauthorized' });
+        }
 
-app.post('claim-coupon', async (req, res) => {
-    //normal user
-})
+        const coupon = await prisma.coupon.update({
+            where: {
+                id: couponId,
+                AdminId: req.admin.id
+            },
+            data: {
+                code,
+                totalQty,
+                expiryDate: expiryDate ? new Date(expiryDate) : undefined
+            }
+        });
 
-app.listen(port, ()=>{
-    console.log('Server is running on port 3000');
-})
+        return res.status(200).json({ message: 'Coupon updated successfully', coupon });
+    } catch (err) {
+        return res.status(400).json({ error: 'Failed to update coupon' });
+    }
+});
+
+
+app.post('/claim-coupon', async (req: any, res: any) => {
+    try {
+        const { couponCode } = req.body;
+        const clientIp = req.ip;
+        const sessionId = req.cookies.sessionId || Math.random().toString(36).substring(7);
+
+        if (!req.cookies.sessionId) {
+            res.cookie('sessionId', sessionId, { httpOnly: true });
+        }
+
+        
+        const coupon = await prisma.coupon.findUnique({
+            where: { code: couponCode },
+            include: { claimedBy: true }
+        });
+
+        if (!coupon) {
+            return res.status(404).json({ error: 'Coupon not found' });
+        }
+
+        if (coupon.expiryDate && coupon.expiryDate < new Date()) {
+            return res.status(400).json({ error: 'Coupon has expired' });
+        }
+
+        if (coupon.claimedQty >= coupon.totalQty) {
+            return res.status(400).json({ error: 'Coupon quantity exhausted' });
+        }
+
+        const existingClaim = await prisma.claimedCoupon.findFirst({
+            where: {
+                couponId: coupon.id,
+                OR: [
+                    { claimedByIp: clientIp },
+                    { sessionId: sessionId }
+                ]
+            }
+        });
+
+        if (existingClaim) {
+            await prisma.claimedCoupon.update({
+                where: { id: existingClaim.id },
+                data: { claimAttempts: { increment: 1 } }
+            });
+            return res.status(400).json({ error: 'You have already claimed this coupon' });
+        }
+
+        await prisma.$transaction([
+            prisma.claimedCoupon.create({
+                data: {
+                    couponId: coupon.id,
+                    claimedByIp: clientIp,
+                    sessionId: sessionId
+                }
+            }),
+            prisma.coupon.update({
+                where: { id: coupon.id },
+                data: { claimedQty: { increment: 1 } }
+            })
+        ]);
+
+        return res.status(200).json({ message: 'Coupon claimed successfully' });
+    } catch (err) {
+        console.error(err);
+        return res.status(500).json({ error: 'Failed to claim coupon' });
+    }
+});
+
+// Get Coupon Statistics (Admin only)
+app.get('/coupon-stats/:couponId', AuthMiddleware, async (req: any, res: any) => {
+    try {
+        if (!req.admin) {
+            return res.status(401).json({ error: 'Unauthorized' });
+        }
+
+        const { couponId } = req.params;
+
+        const coupon = await prisma.coupon.findUnique({
+            where: {
+                id: couponId,
+                AdminId: req.admin.id
+            },
+            include: {
+                claimedBy: {
+                    orderBy: {
+                        createdAt: 'desc'
+                    },
+                    select: {
+                        id: true,
+                        claimedByIp: true,
+                        sessionId: true,
+                        claimAttempts: true,
+                        createdAt: true
+                    }
+                }
+            }
+        });
+
+        if (!coupon) {
+            return res.status(404).json({ error: 'Coupon not found' });
+        }
+
+        const stats = {
+            couponCode: coupon.code,
+            totalQuantity: coupon.totalQty,
+            claimedQuantity: coupon.claimedQty,
+            remainingQuantity: coupon.totalQty - coupon.claimedQty,
+            expiryDate: coupon.expiryDate,
+            isExpired: coupon.expiryDate ? coupon.expiryDate < new Date() : false,
+            claims: coupon.claimedBy,
+            uniqueIPs: new Set(coupon.claimedBy.map(claim => claim.claimedByIp)).size,
+            uniqueSessions: new Set(coupon.claimedBy.map(claim => claim.sessionId)).size,
+            totalAttempts: coupon.claimedBy.reduce((sum, claim) => sum + claim.claimAttempts, 0)
+        };
+
+        return res.status(200).json(stats);
+    } catch (err) {
+        console.error(err);
+        return res.status(500).json({ error: 'Failed to fetch coupon statistics' });
+    }
+});
+
+// Get All Coupons with Stats (Admin only)
+app.get('/coupons', AuthMiddleware, async (req: any, res: any) => {
+    try {
+        if (!req.admin) {
+            return res.status(401).json({ error: 'Unauthorized' });
+        }
+
+        const coupons = await prisma.coupon.findMany({
+            where: {
+                AdminId: req.admin.id
+            },
+            include: {
+                _count: {
+                    select: {
+                        claimedBy: true
+                    }
+                }
+            },
+            orderBy: {
+                createdAt: 'desc'
+            }
+        });
+
+        const couponsWithStats = coupons.map(coupon => ({
+            id: coupon.id,
+            code: coupon.code,
+            totalQty: coupon.totalQty,
+            claimedQty: coupon.claimedQty,
+            remainingQty: coupon.totalQty - coupon.claimedQty,
+            expiryDate: coupon.expiryDate,
+            isExpired: coupon.expiryDate ? coupon.expiryDate < new Date() : false,
+            totalClaims: coupon._count.claimedBy,
+            createdAt: coupon.createdAt
+        }));
+
+        return res.status(200).json(couponsWithStats);
+    } catch (err) {
+        console.error(err);
+        return res.status(500).json({ error: 'Failed to fetch coupons' });
+    }
+});
+
+app.listen(port, () => {
+    console.log(`Server is running on port ${port}`);
+});
