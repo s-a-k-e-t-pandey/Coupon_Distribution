@@ -75,9 +75,10 @@ app.post('/create-coupon', middleware_1.AuthMiddleware, (req, res) => __awaiter(
 app.delete('/delete-coupon', middleware_1.AuthMiddleware, (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const { couponId } = req.body;
-        if (!req.admin) {
+        if (!req.admin || typeof req.admin === 'string') {
             return res.status(401).json({ error: 'Unauthorized' });
         }
+        console.log("reached here");
         yield prisma.coupon.delete({
             where: {
                 id: couponId,
@@ -87,13 +88,14 @@ app.delete('/delete-coupon', middleware_1.AuthMiddleware, (req, res) => __awaite
         return res.status(200).json({ message: 'Coupon deleted successfully' });
     }
     catch (err) {
+        console.error(err);
         return res.status(400).json({ error: 'Failed to delete coupon' });
     }
 }));
 app.put('/update-coupon', middleware_1.AuthMiddleware, (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const { couponId, code, totalQty, expiryDate } = req.body;
-        if (!req.admin) {
+        if (!req.admin || typeof req.admin === 'string') {
             return res.status(401).json({ error: 'Unauthorized' });
         }
         const coupon = yield prisma.coupon.update({
@@ -168,6 +170,90 @@ app.post('/claim-coupon', (req, res) => __awaiter(void 0, void 0, void 0, functi
     catch (err) {
         console.error(err);
         return res.status(500).json({ error: 'Failed to claim coupon' });
+    }
+}));
+// Get Coupon Statistics (Admin only)
+app.get('/coupon-stats/:couponId', middleware_1.AuthMiddleware, (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        if (!req.admin || typeof req.admin === 'string') {
+            return res.status(401).json({ error: 'Unauthorized' });
+        }
+        const { couponId } = req.params;
+        const coupon = yield prisma.coupon.findUnique({
+            where: {
+                id: parseInt(couponId),
+                AdminId: req.admin.id
+            },
+            include: {
+                claimedBy: {
+                    orderBy: {
+                        claimedAt: 'desc'
+                    },
+                    select: {
+                        id: true,
+                        claimedByIp: true,
+                        sessionId: true,
+                        claimAttempts: true,
+                        claimedAt: true
+                    }
+                }
+            }
+        });
+        if (!coupon) {
+            return res.status(404).json({ error: 'Coupon not found' });
+        }
+        const stats = {
+            couponCode: coupon.code,
+            totalQuantity: coupon.totalQty,
+            claimedQuantity: coupon.claimedQty,
+            remainingQuantity: coupon.totalQty - coupon.claimedQty,
+            expiryDate: coupon.expiryDate,
+            isExpired: coupon.expiryDate ? coupon.expiryDate < new Date() : false,
+            claims: coupon.claimedBy,
+            uniqueIPs: new Set(coupon.claimedBy.map(claim => claim.claimedByIp)).size,
+            uniqueSessions: new Set(coupon.claimedBy.map(claim => claim.sessionId)).size,
+            totalAttempts: coupon.claimedBy.reduce((sum, claim) => sum + claim.claimAttempts, 0)
+        };
+        return res.status(200).json(stats);
+    }
+    catch (err) {
+        console.error(err);
+        return res.status(500).json({ error: 'Failed to fetch coupon statistics' });
+    }
+}));
+// Get All Coupons with Stats (Admin only)
+app.get('/coupons', middleware_1.AuthMiddleware, (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        if (!req.admin || typeof req.admin === 'string') {
+            return res.status(401).json({ error: 'Unauthorized' });
+        }
+        const coupons = yield prisma.coupon.findMany({
+            where: {
+                AdminId: req.admin.id
+            },
+            include: {
+                _count: {
+                    select: {
+                        claimedBy: true
+                    }
+                }
+            }
+        });
+        const couponsWithStats = coupons.map(coupon => ({
+            id: coupon.id,
+            code: coupon.code,
+            totalQty: coupon.totalQty,
+            claimedQty: coupon.claimedQty,
+            remainingQty: coupon.totalQty - coupon.claimedQty,
+            expiryDate: coupon.expiryDate,
+            isExpired: coupon.expiryDate ? coupon.expiryDate < new Date() : false,
+            totalClaims: coupon._count.claimedBy
+        }));
+        return res.status(200).json(couponsWithStats);
+    }
+    catch (err) {
+        console.error(err);
+        return res.status(500).json({ error: 'Failed to fetch coupons' });
     }
 }));
 app.listen(port, () => {

@@ -77,9 +77,10 @@ app.post('/create-coupon', AuthMiddleware, async (req, res) => {
 app.delete('/delete-coupon', AuthMiddleware, async (req: any, res: any) => {
     try {
         const { couponId } = req.body;
-        if (!req.admin) {
+        if (!req.admin || typeof req.admin === 'string') {
             return res.status(401).json({ error: 'Unauthorized' });
         }
+        console.log("reached here");
 
         await prisma.coupon.delete({
             where: {
@@ -90,6 +91,7 @@ app.delete('/delete-coupon', AuthMiddleware, async (req: any, res: any) => {
 
         return res.status(200).json({ message: 'Coupon deleted successfully' });
     } catch (err) {
+        console.error(err);
         return res.status(400).json({ error: 'Failed to delete coupon' });
     }
 });
@@ -97,7 +99,7 @@ app.delete('/delete-coupon', AuthMiddleware, async (req: any, res: any) => {
 app.put('/update-coupon', AuthMiddleware, async (req: any, res: any) => {
     try {
         const { couponId, code, totalQty, expiryDate } = req.body;
-        if (!req.admin) {
+        if (!req.admin || typeof req.admin === 'string') {
             return res.status(401).json({ error: 'Unauthorized' });
         }
 
@@ -190,7 +192,7 @@ app.post('/claim-coupon', async (req: any, res: any) => {
 // Get Coupon Statistics (Admin only)
 app.get('/coupon-stats/:couponId', AuthMiddleware, async (req: any, res: any) => {
     try {
-        if (!req.admin) {
+        if (!req.admin || typeof req.admin === 'string') {
             return res.status(401).json({ error: 'Unauthorized' });
         }
 
@@ -198,20 +200,20 @@ app.get('/coupon-stats/:couponId', AuthMiddleware, async (req: any, res: any) =>
 
         const coupon = await prisma.coupon.findUnique({
             where: {
-                id: couponId,
+                id: parseInt(couponId),
                 AdminId: req.admin.id
             },
             include: {
                 claimedBy: {
                     orderBy: {
-                        createdAt: 'desc'
+                        claimedAt: 'desc'
                     },
                     select: {
                         id: true,
                         claimedByIp: true,
                         sessionId: true,
                         claimAttempts: true,
-                        createdAt: true
+                        claimedAt: true
                     }
                 }
             }
@@ -244,7 +246,7 @@ app.get('/coupon-stats/:couponId', AuthMiddleware, async (req: any, res: any) =>
 // Get All Coupons with Stats (Admin only)
 app.get('/coupons', AuthMiddleware, async (req: any, res: any) => {
     try {
-        if (!req.admin) {
+        if (!req.admin || typeof req.admin === 'string') {
             return res.status(401).json({ error: 'Unauthorized' });
         }
 
@@ -258,9 +260,6 @@ app.get('/coupons', AuthMiddleware, async (req: any, res: any) => {
                         claimedBy: true
                     }
                 }
-            },
-            orderBy: {
-                createdAt: 'desc'
             }
         });
 
@@ -272,8 +271,7 @@ app.get('/coupons', AuthMiddleware, async (req: any, res: any) => {
             remainingQty: coupon.totalQty - coupon.claimedQty,
             expiryDate: coupon.expiryDate,
             isExpired: coupon.expiryDate ? coupon.expiryDate < new Date() : false,
-            totalClaims: coupon._count.claimedBy,
-            createdAt: coupon.createdAt
+            totalClaims: coupon._count.claimedBy
         }));
 
         return res.status(200).json(couponsWithStats);
