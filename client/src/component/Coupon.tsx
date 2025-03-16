@@ -8,7 +8,7 @@ export default function Coupon() {
 
     return (
         <div className={`relative border border-4 border-dashed border-slate-800 rounded-lg max-w-[580px] max-h-[250px]`}>
-            <img src={`${pix}`} alt="Coupon Code" className="absolute opacity-70 w-full max-h-[148px] object-cover rounded-md mb-2 transparent" />
+            <img src={`${pix}`} alt="Coupon Code" className="absolute opacity-70 w-full max-h-[153px] object-cover rounded-md mb-2 transparent" />
             <div className="bg-white bg-opacity-60 rounded-lg p-6 h-full flex flex-col justify-between text-bold">
                 <div className="flex flex-row">
                     <div className='flex flex-1 items-center justify-center brightness-1000'>
@@ -27,10 +27,7 @@ export default function Coupon() {
                     </div>
                 </div>
             </div>
-            <div className="w-12 h-12 bg-white rounded-full absolute top-1/2 transform -translate-y-1/2 left-0 -ml-6"></div>
-            <div className="w-12 h-12 bg-white rounded-full absolute top-1/2 transform -translate-y-1/2 right-0 -mr-6"></div>
         </div>
     );
 }
 
-const bgurl = '../assets/pix.png';

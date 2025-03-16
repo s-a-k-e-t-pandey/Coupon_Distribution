@@ -69,6 +69,7 @@ app.post('/create-coupon', middleware_1.AuthMiddleware, (req, res) => __awaiter(
         res.status(201).json({ message: 'Coupon created successfully', coupon });
     }
     catch (err) {
+        console.error(err);
         res.status(400).json({ error: 'Coupon already exists or invalid data' });
     }
 }));
@@ -120,13 +121,17 @@ app.post('/claim-coupon', (req, res) => __awaiter(void 0, void 0, void 0, functi
         const { couponCode } = req.body;
         const clientIp = req.ip;
         const sessionId = req.cookies.sessionId || Math.random().toString(36).substring(7);
+        console.log("Coupon Code : ", couponCode);
         if (!req.cookies.sessionId) {
             res.cookie('sessionId', sessionId, { httpOnly: true });
         }
+        console.log("Client IP : ", clientIp);
+        console.log("Session ID : ", sessionId);
         const coupon = yield prisma.coupon.findUnique({
             where: { code: couponCode },
             include: { claimedBy: true }
         });
+        console.log("Coupon : ", coupon);
         if (!coupon) {
             return res.status(404).json({ error: 'Coupon not found' });
         }
@@ -145,6 +150,7 @@ app.post('/claim-coupon', (req, res) => __awaiter(void 0, void 0, void 0, functi
                 ]
             }
         });
+        console.log("Existing Claim : ", existingClaim);
         if (existingClaim) {
             yield prisma.claimedCoupon.update({
                 where: { id: existingClaim.id },

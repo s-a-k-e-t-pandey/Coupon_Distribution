@@ -69,6 +69,7 @@ app.post('/create-coupon', AuthMiddleware, async (req, res) => {
         
         res.status(201).json({ message: 'Coupon created successfully', coupon });
     } catch (err) {
+        console.error(err);
         res.status(400).json({ error: 'Coupon already exists or invalid data' });
     }
 });
@@ -128,15 +129,20 @@ app.post('/claim-coupon', async (req: any, res: any) => {
         const clientIp = req.ip;
         const sessionId = req.cookies.sessionId || Math.random().toString(36).substring(7);
 
+        console.log("Coupon Code : ", couponCode);
         if (!req.cookies.sessionId) {
             res.cookie('sessionId', sessionId, { httpOnly: true });
         }
+
+        console.log("Client IP : ", clientIp);
+        console.log("Session ID : ", sessionId);
 
         
         const coupon = await prisma.coupon.findUnique({
             where: { code: couponCode },
             include: { claimedBy: true }
         });
+        console.log("Coupon : ", coupon);
 
         if (!coupon) {
             return res.status(404).json({ error: 'Coupon not found' });
@@ -159,6 +165,8 @@ app.post('/claim-coupon', async (req: any, res: any) => {
                 ]
             }
         });
+
+        console.log("Existing Claim : ", existingClaim);
 
         if (existingClaim) {
             await prisma.claimedCoupon.update({
@@ -189,7 +197,6 @@ app.post('/claim-coupon', async (req: any, res: any) => {
     }
 });
 
-// Get Coupon Statistics (Admin only)
 app.get('/coupon-stats/:couponId', AuthMiddleware, async (req: any, res: any) => {
     try {
         if (!req.admin || typeof req.admin === 'string') {

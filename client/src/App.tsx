@@ -1,11 +1,18 @@
-import Coupon from "./component/Coupon"
 import AdminDash from "./component/AdminDash"
-import Landingpage from "./component/Landingpage"
+import Landingpage from "./component/LandingPage"
+import { BrowserRouter as Router, Route, Routes } from 'react-router-dom';
+import AdminLogin from "./component/LoginPage";
 
 export default function App() {
-  return <div className="flex justify-center items-center h-screen">
-    {/* <AdminDash/> */}
-    {/* <Coupon></Coupon> */}
-    <Landingpage/>
-  </div>
+  const token = localStorage.getItem('token');
+  
+  return (
+  <Router>
+    <Routes>
+      <Route path="/" element={<Landingpage/>}/>
+      <Route path="/admin" element={<AdminDash/>}/>
+      <Route path="/login" element={<AdminLogin/>}/>
+    </Routes>
+  </Router>
+  )
 }
