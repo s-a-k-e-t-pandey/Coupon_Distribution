@@ -23,15 +23,16 @@ model Admin {
 }
 
 model Coupon {
-  id       Int   @id @default(autoincrement())
-  code        String   @unique
-  isClaimed   Boolean  @default(false)
+  id          Int       @id @default(autoincrement())
+  code        String    @unique
+  isActive    Boolean   @default(true)
   totalQty    Int
-  claimedQty  Int      @default(0)
+  claimedQty  Int       @default(0)
   expiryDate  DateTime?
   claimedBy   ClaimedCoupon[]
   AdminId     Int
-  admin       Admin    @relation(fields: [AdminId], references: [id])
+  createdAt   DateTime  @default(now())
+  admin       Admin     @relation(fields: [AdminId], references: [id])
 }
 
 model ClaimedCoupon {

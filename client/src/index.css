@@ -28,3 +28,24 @@ body {
 ::-webkit-scrollbar-thumb:hover {
   background: #718096;
 }
+
+
+@layer utilities {
+  @keyframes meteor {
+    0% {
+      transform: rotate(215deg) translateX(0) translateY(0) translateZ(50); 
+      opacity: 1;
+    }
+    70% {
+      opacity: 1;
+    }
+    100% {
+      transform: rotate(15deg) translateX(-500px);
+      opacity: 0;
+    }
+  }
+
+  .animate-meteor-effect {
+    animation: meteor 5s linear infinite;
+  }
+}

@@ -28,10 +28,12 @@ export default function LandingPage() {
         return () => clearInterval(interval);
     }, []);
 
+    
+
     const handleClaim = async () => {
         setIsLoading(true);
         try {
-            const response = await fetch('/claim-coupon', {
+            const response = await fetch('http://localhost:3000/claim-coupon', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
             });
@@ -77,7 +79,7 @@ export default function LandingPage() {
                     <span className="text-yellow-400 text-2xl tracking-wider drop-shadow-md animate-fadeIn">{couponCode}</span>
                 ) : 'Claim Your Coupon'}
               </button>
-            : <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 px-6 py-3 text-lg font-bold text-white  backdrop-blur-md transition-all duration-300 hover:bg-white/20 hover:scale-105 hover:shadow-lg disabled:opacity-50"><Coupon></Coupon></div>}
+            : <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 px-6 py-3 text-lg font-bold text-white  backdrop-blur-md transition-all duration-300 hover:bg-white/20 hover:scale-105 hover:shadow-lg disabled:opacity-50"><Coupon ></Coupon></div>}
         </div>
     );
 }

@@ -7,7 +7,7 @@ export function Bg() {
     const [stars, setStars] = useState([]); 
 
     useEffect(() => {
-        const starCount = 500;
+        const starCount = 1000;
         const newStars = Array.from({ length: starCount }, (_, i) => ({
             id: i,
             x: Math.random() * 100,

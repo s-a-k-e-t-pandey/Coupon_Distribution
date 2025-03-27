@@ -7,6 +7,8 @@ import jwt from "jsonwebtoken";
 import { AuthMiddleware } from './middleware';
 import cookieParser from 'cookie-parser';
 
+
+
 const port = process.env.PORT || 3001;
 const app = express();
 
@@ -16,6 +18,24 @@ app.use(cookieParser());
 
 const prisma = new PrismaClient();
 const secret = process.env.JWT_SECRET || 'mysecret';
+
+
+async function cleanupExpiredCoupons() {
+    try {
+      await prisma.coupon.deleteMany({
+        where: {
+            OR: [
+                { expiryDate: { lt: new Date() }}, 
+                { claimedQty: { gte: prisma.coupon.fields.totalQty }}
+            ]
+        }
+      });
+      console.log(new Date());
+      console.log('Deleted expired coupons on startup');
+    } catch (error) {
+      console.error('Failed to clean up coupons:', error);
+    }
+}
 
 
 app.post('/adminlogin', async (req: any, res: any) => {
@@ -48,6 +68,29 @@ app.post('/adminlogin', async (req: any, res: any) => {
         return res.status(500).json({ error: 'Internal server error' });
     }
 });
+
+
+
+app.get('/coupons/available', async (req, res)=>{
+    try{
+        console.log("called Available")
+        const coupons = await prisma.coupon.findFirst({
+            where: {
+                AND: [
+                    {claimedQty: { lt : prisma.coupon.fields.totalQty }},
+                    {expiryDate: { gt : new Date() }}
+                ]
+            }
+        })
+        res.status(200).json(coupons);
+        return;
+    }catch(e){
+        console.error(e);
+        res.status(500).json({error: 'Internal server error'});
+        return;
+    }
+})
+
 
 // Create Coupon (Admin only)
 app.post('/create-coupon', AuthMiddleware, async (req, res) => {
@@ -250,7 +293,7 @@ app.get('/coupon-stats/:couponId', AuthMiddleware, async (req: any, res: any) =>
     }
 });
 
-// Get All Coupons with Stats (Admin only)
+
 app.get('/coupons', AuthMiddleware, async (req: any, res: any) => {
     try {
         if (!req.admin || typeof req.admin === 'string') {
@@ -288,6 +331,13 @@ app.get('/coupons', AuthMiddleware, async (req: any, res: any) => {
     }
 });
 
-app.listen(port, () => {
-    console.log(`Server is running on port ${port}`);
-});
+
+async function startServer() {
+    await cleanupExpiredCoupons();
+    
+    app.listen(port, () => {
+        console.log(`Server is running on port ${port}`);
+    });
+}
+
+startServer();

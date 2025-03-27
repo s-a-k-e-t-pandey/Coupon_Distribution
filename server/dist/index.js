@@ -27,6 +27,25 @@ app.use((0, cors_1.default)());
 app.use((0, cookie_parser_1.default)());
 const prisma = new client_1.PrismaClient();
 const secret = process.env.JWT_SECRET || 'mysecret';
+function cleanupExpiredCoupons() {
+    return __awaiter(this, void 0, void 0, function* () {
+        try {
+            yield prisma.coupon.deleteMany({
+                where: {
+                    OR: [
+                        { expiryDate: { lt: new Date() } },
+                        { claimedQty: { gte: prisma.coupon.fields.totalQty } }
+                    ]
+                }
+            });
+            console.log(new Date());
+            console.log('Deleted expired coupons on startup');
+        }
+        catch (error) {
+            console.error('Failed to clean up coupons:', error);
+        }
+    });
+}
 app.post('/adminlogin', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const { success } = types_1.AdminSignIn.safeParse(req.body);
@@ -48,6 +67,26 @@ app.post('/adminlogin', (req, res) => __awaiter(void 0, void 0, void 0, function
     catch (e) {
         console.error(e);
         return res.status(500).json({ error: 'Internal server error' });
+    }
+}));
+app.get('/coupons/available', (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        console.log("called Available");
+        const coupons = yield prisma.coupon.findFirst({
+            where: {
+                AND: [
+                    { claimedQty: { lt: prisma.coupon.fields.totalQty } },
+                    { expiryDate: { gt: new Date() } }
+                ]
+            }
+        });
+        res.status(200).json(coupons);
+        return;
+    }
+    catch (e) {
+        console.error(e);
+        res.status(500).json({ error: 'Internal server error' });
+        return;
     }
 }));
 // Create Coupon (Admin only)
@@ -178,7 +217,6 @@ app.post('/claim-coupon', (req, res) => __awaiter(void 0, void 0, void 0, functi
         return res.status(500).json({ error: 'Failed to claim coupon' });
     }
 }));
-// Get Coupon Statistics (Admin only)
 app.get('/coupon-stats/:couponId', middleware_1.AuthMiddleware, (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         if (!req.admin || typeof req.admin === 'string') {
@@ -227,7 +265,6 @@ app.get('/coupon-stats/:couponId', middleware_1.AuthMiddleware, (req, res) => __
         return res.status(500).json({ error: 'Failed to fetch coupon statistics' });
     }
 }));
-// Get All Coupons with Stats (Admin only)
 app.get('/coupons', middleware_1.AuthMiddleware, (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         if (!req.admin || typeof req.admin === 'string') {
@@ -262,6 +299,12 @@ app.get('/coupons', middleware_1.AuthMiddleware, (req, res) => __awaiter(void 0,
         return res.status(500).json({ error: 'Failed to fetch coupons' });
     }
 }));
-app.listen(port, () => {
-    console.log(`Server is running on port ${port}`);
-});
+function startServer() {
+    return __awaiter(this, void 0, void 0, function* () {
+        yield cleanupExpiredCoupons();
+        app.listen(port, () => {
+            console.log(`Server is running on port ${port}`);
+        });
+    });
+}
+startServer();

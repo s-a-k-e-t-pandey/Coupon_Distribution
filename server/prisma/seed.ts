@@ -5,8 +5,7 @@ const prisma = new PrismaClient();
 
 async function seedAdmin() {
   try{
-    const hashedPassword = await bcrypt.hash('admin123', 10); 
-
+    const hashedPassword = await bcrypt.hash('saket123', 10); 
     await prisma.admin.create({
         data: {
         email: 'saketpandey@gmail.com',
